@@ -38,13 +38,27 @@
         prop="state"
         header-align="center"
         align="center"
-        label="状态 1可使用 2已失效">
+        label="状态">
+        <template slot-scope="scope">
+          <el-tag v-if="scope.row.state==1">可使用</el-tag>
+          <el-tag v-else-if="scope.row.state==2">已失效</el-tag>
+        </template>
       </el-table-column>
       <el-table-column
         prop="type"
         header-align="center"
         align="center"
-        label="类型 1小说 2漫画">
+        label="类型">
+        <template slot-scope="scope">
+          <el-tag v-if="scope.row.type==1">小说</el-tag>
+          <el-tag v-else-if="scope.row.type==2">漫画</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="number"
+        header-align="center"
+        align="center"
+        label="当前抓取数量">
       </el-table-column>
       <el-table-column
         prop="url"
@@ -52,12 +66,12 @@
         align="center"
         label="网站地址">
       </el-table-column>
-      <el-table-column
+      <!-- <el-table-column
         prop="dateValue"
         header-align="center"
         align="center"
         label="配置值">
-      </el-table-column>
+      </el-table-column> -->
       <el-table-column
         prop="createTime"
         header-align="center"
@@ -71,6 +85,7 @@
         width="150"
         label="操作">
         <template slot-scope="scope">
+          <el-button type="text" size="small" @click="crawl(scope.row.sourceId)">爬取小说</el-button>
           <el-button type="text" size="small" @click="addOrUpdateHandle(scope.row.sourceId)">修改</el-button>
           <el-button type="text" size="small" @click="deleteHandle(scope.row.sourceId)">删除</el-button>
         </template>
@@ -91,103 +106,126 @@
 </template>
 
 <script>
-  import AddOrUpdate from './booksource-add-or-update'
-  export default {
-    data () {
-      return {
-        dataForm: {
-          key: ''
-        },
-        dataList: [],
-        pageIndex: 1,
-        pageSize: 10,
-        totalPage: 0,
-        dataListLoading: false,
-        dataListSelections: [],
-        addOrUpdateVisible: false
-      }
+import AddOrUpdate from "./booksource-add-or-update";
+export default {
+  data() {
+    return {
+      dataForm: {
+        key: ""
+      },
+      dataList: [],
+      pageIndex: 1,
+      pageSize: 10,
+      totalPage: 0,
+      dataListLoading: false,
+      dataListSelections: [],
+      addOrUpdateVisible: false
+    };
+  },
+  components: {
+    AddOrUpdate
+  },
+  activated() {
+    this.getDataList();
+  },
+  methods: {
+    // 获取数据列表
+    getDataList() {
+      this.dataListLoading = true;
+      this.$http({
+        url: this.$http.adornUrl("/book/booksource/list"),
+        method: "get",
+        params: this.$http.adornParams({
+          page: this.pageIndex,
+          limit: this.pageSize,
+          key: this.dataForm.key
+        })
+      }).then(({ data }) => {
+        if (data && data.code === 0) {
+          this.dataList = data.page.list;
+          this.totalPage = data.page.totalCount;
+        } else {
+          this.dataList = [];
+          this.totalPage = 0;
+        }
+        this.dataListLoading = false;
+      });
     },
-    components: {
-      AddOrUpdate
+    // 抓取小说
+    crawl(id) {
+      this.$http({
+        url: this.$http.adornUrl(`/book/booksource/crawl/${id}`),
+        method: "get",
+        params: this.$http.adornParams()
+      }).then(({ data }) => {
+        if (data && data.code === 0) {
+          this.$message({
+            message: "抓取进行中",
+            type: "success"
+          });
+        } else {
+          this.$message.error(data.msg);
+        }
+      });
     },
-    activated () {
-      this.getDataList()
+    // 每页数
+    sizeChangeHandle(val) {
+      this.pageSize = val;
+      this.pageIndex = 1;
+      this.getDataList();
     },
-    methods: {
-      // 获取数据列表
-      getDataList () {
-        this.dataListLoading = true
+    // 当前页
+    currentChangeHandle(val) {
+      this.pageIndex = val;
+      this.getDataList();
+    },
+    // 多选
+    selectionChangeHandle(val) {
+      this.dataListSelections = val;
+    },
+    // 新增 / 修改
+    addOrUpdateHandle(id) {
+      this.addOrUpdateVisible = true;
+      this.$nextTick(() => {
+        this.$refs.addOrUpdate.init(id);
+      });
+    },
+    // 删除
+    deleteHandle(id) {
+      var ids = id
+        ? [id]
+        : this.dataListSelections.map(item => {
+            return item.sourceId;
+          });
+      this.$confirm(
+        `确定对[id=${ids.join(",")}]进行[${id ? "删除" : "批量删除"}]操作?`,
+        "提示",
+        {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          type: "warning"
+        }
+      ).then(() => {
         this.$http({
-          url: this.$http.adornUrl('/book/booksource/list'),
-          method: 'get',
-          params: this.$http.adornParams({
-            'page': this.pageIndex,
-            'limit': this.pageSize,
-            'key': this.dataForm.key
-          })
-        }).then(({data}) => {
+          url: this.$http.adornUrl("/book/booksource/delete"),
+          method: "post",
+          data: this.$http.adornData(ids, false)
+        }).then(({ data }) => {
           if (data && data.code === 0) {
-            this.dataList = data.page.list
-            this.totalPage = data.page.totalCount
+            this.$message({
+              message: "操作成功",
+              type: "success",
+              duration: 1500,
+              onClose: () => {
+                this.getDataList();
+              }
+            });
           } else {
-            this.dataList = []
-            this.totalPage = 0
+            this.$message.error(data.msg);
           }
-          this.dataListLoading = false
-        })
-      },
-      // 每页数
-      sizeChangeHandle (val) {
-        this.pageSize = val
-        this.pageIndex = 1
-        this.getDataList()
-      },
-      // 当前页
-      currentChangeHandle (val) {
-        this.pageIndex = val
-        this.getDataList()
-      },
-      // 多选
-      selectionChangeHandle (val) {
-        this.dataListSelections = val
-      },
-      // 新增 / 修改
-      addOrUpdateHandle (id) {
-        this.addOrUpdateVisible = true
-        this.$nextTick(() => {
-          this.$refs.addOrUpdate.init(id)
-        })
-      },
-      // 删除
-      deleteHandle (id) {
-        var ids = id ? [id] : this.dataListSelections.map(item => {
-          return item.sourceId
-        })
-        this.$confirm(`确定对[id=${ids.join(',')}]进行[${id ? '删除' : '批量删除'}]操作?`, '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          this.$http({
-            url: this.$http.adornUrl('/book/booksource/delete'),
-            method: 'post',
-            data: this.$http.adornData(ids, false)
-          }).then(({data}) => {
-            if (data && data.code === 0) {
-              this.$message({
-                message: '操作成功',
-                type: 'success',
-                duration: 1500,
-                onClose: () => {
-                  this.getDataList()
-                }
-              })
-            } else {
-              this.$message.error(data.msg)
-            }
-          })
-        })
-      }
+        });
+      });
     }
   }
+};
 </script>
